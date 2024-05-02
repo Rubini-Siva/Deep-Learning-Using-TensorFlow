@@ -1,0 +1,79 @@
+# Develop python code for processing and analyzing text data with suitable word embedding techniques for any application of your choice with appropriate benchmark datasets.
+
+import numpy as np
+import pandas as pd
+import os
+from sklearn.model_selection import train_test_split
+from gensim.models import KeyedVectors
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, Flatten, Dense
+
+# Load the IMDb dataset
+url = "https://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz"
+dataset = tf.keras.utils.get_file("aclImdb_v1.tar.gz", url, untar=True, cache_dir='.', cache_subdir='')
+
+# Define function to read IMDb dataset
+def read_imdb_dataset(path):
+    data = []
+    for category in ["train", "test"]:
+        for sentiment in ["pos", "neg"]:
+            file_path = os.path.join(path, category, sentiment)
+            files = os.listdir(file_path)
+            for file in files:
+                with open(os.path.join(file_path, file), "r") as f:
+                    review = f.read()
+                data.append({"review": review, "sentiment": sentiment})
+    return data
+
+# Read IMDb dataset
+imdb_data = read_imdb_dataset(os.path.join(os.path.dirname(dataset), "aclImdb"))
+imdb_df = pd.DataFrame(imdb_data)
+
+# Preprocess the data
+imdb_df['review'] = imdb_df['review'].str.lower()
+
+# Split data into train and test sets
+train_texts, test_texts, train_labels, test_labels = train_test_split(imdb_df['review'], imdb_df['sentiment'], test_size=0.2, random_state=42)
+
+# Tokenize text data
+tokenizer = Tokenizer(num_words=10000)
+tokenizer.fit_on_texts(train_texts)
+train_sequences = tokenizer.texts_to_sequences(train_texts)
+test_sequences = tokenizer.texts_to_sequences(test_texts)
+
+# Pad sequences to ensure uniform length
+maxlen = 200
+train_sequences = pad_sequences(train_sequences, maxlen=maxlen)
+test_sequences = pad_sequences(test_sequences, maxlen=maxlen)
+
+# Define Word2Vec embeddings
+embedding_dim = 100
+embedding_matrix = np.zeros((len(tokenizer.word_index) + 1, embedding_dim))
+
+# Load pre-trained Word2Vec embeddings
+word2vec_model = KeyedVectors.load_word2vec_format('path_to_pretrained_word2vec.bin', binary=True)
+
+# Map Word2Vec embeddings to tokenized words
+for word, i in tokenizer.word_index.items():
+    if word in word2vec_model:
+        embedding_matrix[i] = word2vec_model[word]
+
+# Define the model
+model = Sequential([
+    Embedding(len(tokenizer.word_index) + 1, embedding_dim, input_length=maxlen, weights=[embedding_matrix], trainable=False),
+    Flatten(),
+    Dense(64, activation='relu'),
+    Dense(1, activation='sigmoid')
+])
+
+# Compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+# Train the model
+model.fit(train_sequences, train_labels, epochs=5, batch_size=128, validation_split=0.2)
+
+# Evaluate the model
+test_loss, test_acc = model.evaluate(test_sequences, test_labels)
+print("Test Accuracy:", test_acc)
